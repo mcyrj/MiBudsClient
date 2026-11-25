@@ -528,7 +528,19 @@ class BTController:
 
     def set_noise_settings(self, mode, level=None, *, session, timeout=2.0):
         self._require_noise_backend()
-        return self._noise.apply(self.noise_capabilities, session, mode, level, timeout)
+        capabilities = self.noise_capabilities
+        default_anc_step = 10
+        levels = capabilities.slider_levels(mode)
+        if mode != 1 or level is not None or len(levels) < default_anc_step:
+            return self._noise.apply(capabilities, session, mode, level, timeout)
+
+        # Confirm the mode switch before sending a separate manual level write.
+        default_level = levels[default_anc_step - 1]
+        with self._gestures.transaction():
+            state = self._noise.apply(capabilities, session, mode, timeout=timeout)
+            if state.adaptive is True or state.level == default_level:
+                return state
+            return self._noise.apply(capabilities, session, mode, default_level, timeout)
 
     def request_eq_settings(self, timeout=5.0, *, session=None):
         if not self.capabilities.supports("eq"):

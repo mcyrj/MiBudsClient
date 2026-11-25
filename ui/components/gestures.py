@@ -138,10 +138,17 @@ class GestureSettings(ft.Column):
             for index, side in enumerate(("common",) if mfb else ("left", "right")):
                 current = self._assignments[gesture][index]
                 allowed = self._capabilities[gesture]
-                options = [ft.dropdown.Option(str(action), render(names[action])) for action in allowed]
+                options = [
+                    ft.dropdown.Option(str(action), render(names[action]),
+                                       style=ft.ButtonStyle(color=COLOR_TEXT_PRIMARY))
+                    for action in allowed
+                ]
                 if current not in allowed:
                     label = names.get(current, t("gesture.unknown", code=f"{current:02X}"))
-                    options.append(ft.dropdown.Option(str(current), t("gesture.current", label=label), disabled=True))
+                    options.append(ft.dropdown.Option(
+                        str(current), t("gesture.current", label=label), disabled=True,
+                        style=ft.ButtonStyle(color=COLOR_DISABLED),
+                    ))
                 selector = ft.Dropdown(
                     label=t("side." + side), value=str(current), options=options,
                     disabled=self._busy or not self._connected or self._needs_refresh, expand=True,
