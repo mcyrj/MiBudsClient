@@ -53,7 +53,7 @@ If an earlier installation selected Flet 1.x, update this branch and rerun
 Python before starting the app. This compatibility choice is based on source
 API inspection; a live app/hardware check remains outstanding.
 
-Follow the [source installation instructions](../README.md#run-from-source)
+Follow the [source installation instructions](../README.en.md#run-from-source)
 using the branch containing this change. Close any previously installed EXE
 with the tray's **Quit** command first: single-instance protection would
 otherwise bring the old EXE back instead of starting the source version.
