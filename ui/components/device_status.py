@@ -15,8 +15,13 @@ from .common import DeviceImage
 class DeviceStatusCard(ft.Container):
     """Keep the device summary layout and display updates together."""
 
-    def __init__(self):
+    def __init__(self, on_battery_refresh=None):
         self.battery_panel = BatteryPanel()
+        self._battery_refresh = ft.IconButton(
+            icon=ft.Icons.REFRESH, icon_size=16, icon_color=COLOR_HOME_MUTED,
+            width=32, height=32, tooltip=t("battery.check"), disabled=True,
+            visible=on_battery_refresh is not None, on_click=on_battery_refresh,
+        )
         self.status_bar = ft.Text(t("device_status.disconnected"), size=11, color=COLOR_HOME_MUTED)
         self.status_dot = ft.Container(width=7, height=7, border_radius=4, bgcolor="grey")
         self.status_row = ft.Row([self.status_dot, self.status_bar], spacing=6, tight=True,
@@ -45,8 +50,8 @@ class DeviceStatusCard(ft.Container):
                     self._device_name_slot,
                     self.status_badge,
                     self._battery_spacer,
-                    ft.Container(content=self.battery_panel,
-                                 alignment=ft.Alignment.CENTER),
+                    ft.Row([self.battery_panel, self._battery_refresh], spacing=4,
+                           vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ],
                 spacing=4,
                 tight=True,
@@ -85,6 +90,7 @@ class DeviceStatusCard(ft.Container):
         self.status_bar.value = t("device_status." + label)
         self.status_dot.bgcolor = color
         self.status_row.tooltip = render(reason) if reason else None
+        self._battery_refresh.disabled = state != "connected"
 
-    def update_battery(self, left: int, right: int, case: int, transient: bool = False) -> None:
+    def update_battery(self, left: int, right: int, case: int) -> None:
         self.battery_panel.update_all(left, right, case)

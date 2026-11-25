@@ -147,8 +147,9 @@ class RcspConfigTransport:
                 self._counter = 0x91
             request = _Request(opcode, counter, config_id=config_id, namespace=namespace)
             self._pending = request
-            try:
-                self._connection.send(builder(counter))
+        try:
+            self._connection.send(builder(counter))
+            with self._condition:
                 if not self._condition.wait_for(lambda: request.completed, timeout):
                     raise TimeoutError(m(namespace + ".timeout"))
                 if request.error:
@@ -156,7 +157,8 @@ class RcspConfigTransport:
                 if generation != self._generation:
                     raise ConnectionError(m(namespace + ".connection_changed"))
                 return request.data
-            finally:
+        finally:
+            with self._condition:
                 self._pending = None
 
     def transaction(self):

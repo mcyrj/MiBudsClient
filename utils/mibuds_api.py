@@ -26,6 +26,8 @@ _VERSION = re.compile(r"sha256-[0-9a-f]{64}\Z")
 def cache_directory() -> Path:
     if sys.platform == "win32":
         root = Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Caches"
     else:
         root = Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache")
     return root / "MiBudsClient" / "catalog"

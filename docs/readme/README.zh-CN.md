@@ -9,11 +9,11 @@
 **在电脑上管理你的小米和 Redmi 耳机。**
 
 查看电量，管理噪声控制、均衡器预设、触控手势和低延迟模式。<br>
-使用 Python 和 Flet 开发，适用于 Windows 和 Linux。
+使用 Python 和 Flet 开发，适用于 Windows、Linux 和 macOS。
 
-[**下载**](https://github.com/CesurPolat/MiBudsClient/releases) · [快速开始](#快速开始) · [从源码运行](#从源码运行) · [反馈问题](https://github.com/CesurPolat/MiBudsClient/issues)
+[**下载**](https://github.com/mcyrj/MiBudsClient/releases) · [快速开始](#快速开始) · [从源码运行](#从源码运行) · [反馈问题](https://github.com/mcyrj/MiBudsClient/issues)
 
-<a href="https://github.com/CesurPolat/MiBudsClient/releases"><img src="../MiBudsClientPreview.png" alt="MiBudsClient 桌面界面预览" width="720"></a>
+<a href="https://github.com/mcyrj/MiBudsClient/releases"><img src="../MiBudsClientPreview.png" alt="MiBudsClient 桌面界面预览" width="720"></a>
 
 </div>
 
@@ -38,6 +38,7 @@
 - **已实现功能：** 电量、ANC/通透、EQ 预设、支持的触控手势和低延迟。选项取决于型号，电量取决于设备实际返回的数据。
 - **Windows：** 动态发现 RFCOMM 通道；MIUI SPP（FD2D）使用命令认证，XiaoAI/标准 SPP 使用原始认证。
 - **Linux：** 通过 BlueZ SDP 记录按完整服务 UUID 动态发现 RFCOMM 通道，并根据服务选择认证方式。只有在无法解析任何服务通道时，Redmi Buds 6 Play 才使用通道 6 回退。硬件兼容性仍取决于设备和固件。
+- **macOS：** 通过 Apple IOBluetooth 按服务 UUID 解析 RFCOMM 通道并建立连接；运行源码时，`requirements.txt` 会安装 IOBluetooth 的 PyObjC 桥接包。硬件兼容性仍取决于设备和固件。
 - **硬件依据：** Redmi Buds 6 Play 是项目的参考设备，已有电量/低延迟使用记录以及下方注明日期的 EQ/手势检查。这不代表所有型号都已验证；ANC/通透和原始认证仍需实机确认。
 
 名称、VID/PID、图片和能力数据来自[设备目录](../../assets/device_catalog.json)。识别到型号并不保证协议会话可用。控件按目录提供，操作能否完成还取决于连接和设备响应。固件和地区版本可能存在差异。
@@ -53,13 +54,13 @@ MiBudsClient 是独立社区项目，与小米没有隶属关系。
 ## 快速开始
 
 1. 在电脑蓝牙设置中配对并连接耳机。
-2. 从 [Releases](https://github.com/CesurPolat/MiBudsClient/releases) 下载当前平台的安装包，或[从源码运行](#从源码运行)。
+2. 从 [Releases](https://github.com/mcyrj/MiBudsClient/releases) 下载 Apple 芯片版。Windows 和 Linux 用户可以下载[上游版本](https://github.com/CesurPolat/MiBudsClient/releases)，也可以[从源码运行](#从源码运行)。
 3. 启动应用。它会查找已连接且在目录中的设备，并自动尝试建立蓝牙控制连接。
 4. 连接后查看电量及该型号可用的控件。在**设置**中管理支持的手势、EQ、噪声控制、开机启动和语言。
 
 配对由操作系统负责；应用需要已有的蓝牙连接。同时只运行一个实例，再次启动会将已有窗口置于前台。使用托盘菜单的退出命令可完全关闭程序。
 
-按 **F12** 查看运行日志。在 Linux 上，请先聚焦 MiBudsClient，再打开内置控制台；可选择、复制或清空日志。再次按 F12 关闭。Windows 仍使用独立控制台窗口。控制台关闭时仍会收集日志。
+按 **F12** 查看运行日志。在 Linux 和 macOS 上，请先聚焦 MiBudsClient，再打开内置控制台；可选择、复制或清空日志。再次按 F12 关闭。Windows 仍使用独立控制台窗口。控制台关闭时仍会收集日志。
 
 ## 使用说明
 
@@ -97,10 +98,10 @@ MiBudsClient 是独立社区项目，与小米没有隶属关系。
 
 ## 从源码运行
 
-需要带有 `venv` 和 `pip` 的 Python、蓝牙适配器及已通过系统连接的耳机。
+需要带有 `venv` 和 `pip` 的 Python、蓝牙适配器及已通过系统配对并连接的耳机。
 
 ```sh
-git clone https://github.com/CesurPolat/MiBudsClient.git
+git clone https://github.com/mcyrj/MiBudsClient.git
 cd MiBudsClient
 ```
 
@@ -122,6 +123,16 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
+**macOS**
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+先在**系统设置 → 蓝牙**中配对并连接耳机，再启动程序。首次访问蓝牙时，macOS 可能要求为终端或打包后的应用授予蓝牙权限。关闭窗口后，程序会留在菜单栏。右键点击 Mi Buds Client 图标，选择**打开**或**退出**。macOS 请手动切换低延迟模式。
+
 Linux 需要 BlueZ 的 `bluetoothctl` 进行发现，并需要 PyGObject（`gi`）搭配 AppIndicator3 或 GTK 提供托盘支持。X11 全屏检测还需要 `xprop`、`xwininfo` 和 `xrandr`。这些是系统依赖；`requirements.txt` 仅安装 Python 软件包。
 
 动态 RFCOMM 服务发现还需要 BlueZ 的 `sdptool`，部分发行版将其单独打包。
@@ -138,7 +149,7 @@ Linux 需要 BlueZ 的 `bluetoothctl` 进行发现，并需要 PyGObject（`gi`�
 | Linux 自动模式无效 | 自动游戏模式：GNOME 46 Wayland 会自动配置，如有提示请重新登录。KDE Plasma 6 需要支持 `kwinscript` 的 `kdotool`，Sway 需要 `swaymsg`，Hyprland 需要 `hyprctl`。这三个新后端尚未经过实际桌面会话验证。X11 不需要扩展。[详情](../wayland.md)。 |
 | Linux 通知点击无效 | 检查默认操作支持，或从托盘打开窗口。 |
 
-[反馈问题](https://github.com/CesurPolat/MiBudsClient/issues)时，请提供应用版本、系统和桌面会话、型号、复现步骤及错误详情。
+[反馈问题](https://github.com/mcyrj/MiBudsClient/issues)时，请提供应用版本、系统和桌面会话、型号、复现步骤及错误详情。
 
 ## 开发
 
@@ -170,10 +181,23 @@ flet pack main.py --icon assets\icon.ico --add-data "assets:assets" --name "MiBu
 python tools/build_linux.py
 ```
 
+**macOS**
+
+在 Apple 芯片 Mac 上安装依赖并运行打包脚本。
+
+```sh
+python -m pip install -r requirements.txt pyinstaller==6.21.0
+python tools/build_macos.py
+```
+
+`dist/` 中的 ZIP 包含 `MiBudsClient.app`。应用使用临时签名，未经 Apple 公证。若 macOS 拦截首次启动，确认下载来源后，可在**系统设置 → 隐私与安全性 → 仍要打开**中放行。
+
+如果菜单栏管理工具隐藏了图标，请在工具的布局设置里把 MiBudsClient 移到显示区。从源码启动时，Bartender 可能把这一项显示为 **Python**。
+
 界面资源必须放在 `assets/` 下才能打包。发布前用耳机验证可执行文件；再次启动应激活已有窗口，第二个实例应静默退出。
 
 安装 `appimagetool` 后，运行 `bash tools/build_appimage.sh` 将 Linux 可执行文件打包为 AppImage。仅准备 AppDir 的选项和输出路径见[打包指南](../linux-desktop.md#appimage-packaging)。
 
 ## 许可证
 
-MiBudsClient 使用 [GNU 通用公共许可证 v3.0](../../LICENSE)。
+原项目由 **Cesur Polat** 和 [CesurPolat/MiBudsClient](https://github.com/CesurPolat/MiBudsClient) 的贡献者开发。本 macOS 分支继续采用 [GNU 通用公共许可证 v3.0](../../LICENSE)。署名和改动记录见 [NOTICE.md](../../NOTICE.md)。

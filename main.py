@@ -1,5 +1,6 @@
 """Mi Buds Client - Main Application Entry Point."""
 
+import asyncio
 import flet as ft
 import os
 import threading
@@ -35,6 +36,7 @@ from ui.components.error_report import ErrorReportDialog
 from ui.components.debug_console import DebugConsoleDialog
 from utils.app_shutdown import ApplicationShutdown
 from utils.linux_desktop import setup_linux_desktop
+from utils.resource_manager import get_resource_path
 
 application_shutdown = ApplicationShutdown()
 
@@ -43,6 +45,10 @@ SHOW_STARTUP_TEST_ERROR = False
 
 async def main(page: ft.Page):
     """Main application entry point."""
+    if os.sys.platform == "darwin":
+        from controllers.bluetooth.macos_bluetooth import install_iobluetooth_runloop
+        install_iobluetooth_runloop(asyncio.get_running_loop())
+
     set_language(get_language_preference())
     page.rtl = is_rtl()
 
@@ -100,7 +106,6 @@ async def main(page: ft.Page):
     reports = ErrorReportManager(
         publish=publish, app_version=APP_VERSION,
         get_device=lambda: (getattr(controller_ref['instance'], 'diagnostic_identity', None) or {}).get('device_name', ''),
-        auto_submit=report_queue.enqueue,
         get_identity=lambda: getattr(controller_ref['instance'], 'diagnostic_identity', None),
     )
     application_shutdown.register("F12 listener", debug_console.stop_f12_hotkey_listener)
@@ -138,21 +143,19 @@ async def main(page: ft.Page):
     application_shutdown.register("system tray", tray.stop)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Create UI Components
-    # ─────────────────────────────────────────────────────────────────────────
-    device_status_card = DeviceStatusCard()
-
-    # ─────────────────────────────────────────────────────────────────────────
     # Controller Callbacks
     # ─────────────────────────────────────────────────────────────────────────
     device_connection = DeviceConnection(
         publish=publish,
         get_controller=lambda: controller_ref["instance"],
     )
+    device_status_card = DeviceStatusCard(
+        on_battery_refresh=lambda _: device_connection.request_battery_delayed(user_initiated=True),
+    )
     application_shutdown.register("device requests", device_connection.stop)
 
     page.on_keyboard_event = debug_console.handle_keyboard_event
-    if page.platform == ft.PagePlatform.LINUX:
+    if page.platform == ft.PagePlatform.LINUX or os.sys.platform == "darwin":
         debug_dialog = DebugConsoleDialog(page, debug_console, ui_lock=ui_lock)
         debug_console.set_ui_console(debug_dialog.toggle)
         application_shutdown.register("debug console", debug_dialog.stop)
@@ -192,7 +195,6 @@ async def main(page: ft.Page):
         ),
         status_callback=device_connection.update_status,
         battery_callback=device_connection.update_battery,
-        check_battery_callback=device_connection.request_battery_delayed,
         connection_event_callback=on_connection_event,
     )
     
@@ -202,9 +204,9 @@ async def main(page: ft.Page):
         {"type": "config_notification", "session": session, "records": records, "eq": eq})
     controller.device_candidates_callback = lambda devices: publish(
         {"type": "device_candidates", "devices": [(item.name, item.address) for item in devices]})
-    window_mgr.on_activity_change = controller.set_battery_polling_active
-    controller.set_battery_polling_active(bool(
-        page.window.visible and not page.window.minimized and getattr(page.window, "focused", False)
+    window_mgr.on_visibility_change = controller.set_battery_window_visible
+    controller.set_battery_window_visible(bool(
+        page.window.visible and not page.window.minimized
     ))
     application_shutdown.register("Bluetooth", controller.stop)
 
@@ -226,7 +228,7 @@ async def main(page: ft.Page):
         target=controller.select_device, args=(event.control.value,), daemon=True).start()
     settings_card.set_catalog_device(cached_name, cached_image)
     settings_card.connection_panel.retry_button.on_click = lambda e: settings_card.retry_connection(
-        device_connection.reconnect_on_show)
+        lambda: device_connection.reconnect_on_show(user_initiated=True))
 
     # ─────────────────────────────────────────────────────────────────────────
     # Build Page Layout
@@ -261,6 +263,7 @@ async def main(page: ft.Page):
         get_identity=lambda: controller.device_identity if controller.connected else None,
         get_device_session=lambda: controller.eq_session,
         is_connected=lambda: controller.connected,
+        get_device_address=lambda: controller.device_address,
     )
     message_handler.sync_tray()
     application_shutdown.register("UI notifications", message_handler.begin_shutdown)
@@ -292,7 +295,7 @@ async def main(page: ft.Page):
             reports.capture(exc, 'startup_test')
     report_queue.start()
     catalog_sync.start()
-    threading.Thread(target=tray.run, daemon=True).start()
+    tray.start()
     debug_console.start_f12_hotkey_listener(debug_console.request_toggle)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -323,6 +326,13 @@ async def main(page: ft.Page):
     # ─────────────────────────────────────────────────────────────────────────
     # Start Bluetooth Listener
     # ─────────────────────────────────────────────────────────────────────────
+    if os.sys.platform == "darwin":
+        from controllers.bluetooth.macos_bluetooth import watch_device_connections
+        try:
+            stop_watching = watch_device_connections(controller.on_system_device_connected)
+            application_shutdown.register("Bluetooth connect notifications", stop_watching)
+        except Exception as exc:
+            print(f"[Bluetooth] {exc}")
     threading.Thread(target=controller.listen, daemon=True).start()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -335,7 +345,7 @@ if __name__ == "__main__":
     reserve_instance_port()
     try:
         application_shutdown.register("Linux desktop identity", setup_linux_desktop())
-        ft.run(main, assets_dir="assets")
+        ft.run(main, assets_dir=get_resource_path("assets"))
     finally:
         try:
             application_shutdown.stop()

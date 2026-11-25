@@ -13,6 +13,7 @@ import threading
 import hashlib
 
 from utils.mibuds_api import validate_catalog
+from utils.resource_manager import get_resource_path
 
 
 def _load_app_catalog():
@@ -22,6 +23,11 @@ def _load_app_catalog():
 
 
 _APP_CATALOG = _load_app_catalog()
+with open(get_resource_path("assets/device_catalog_supplement.json"), encoding="utf-8") as source:
+    _SUPPLEMENTAL_MODELS = {
+        (int(product["vid"], 16), int(product["pid"], 16)): (product,)
+        for product in json.load(source)
+    }
 _CATALOG_LOCK = threading.RLock()
 CATALOG_LAST_MODIFY_TIME = _APP_CATALOG["result"]["last_modify_time"]
 _APP_MODELS = {}
@@ -34,12 +40,12 @@ for _product in _APP_CATALOG["result"]["tw_product_list"]:
 def get_device_models(vid: int, pid: int) -> tuple[dict, ...]:
     """Return complete app records, including raw func_list/extra_data.
 
-    Keep all variants for a VID/PID and return independent copies so callers
-    cannot accidentally change the shared catalog. Unknown/SDK-only IDs have
-    no app metadata; never infer functions from a related product family.
+    Return independent copies and use the supplemental catalog only when the
+    active catalog lacks a record for the exact VID/PID.
     """
     with _CATALOG_LOCK:
-        return tuple(deepcopy(_APP_MODELS.get((vid, pid), ())))
+        key = (vid, pid)
+        return tuple(deepcopy(_APP_MODELS.get(key) or _SUPPLEMENTAL_MODELS.get(key, ())))
 
 
 def catalog_diagnostics():

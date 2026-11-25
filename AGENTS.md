@@ -2,7 +2,7 @@
 
 ## Must-follow constraints
 
-- **Windows and Linux support.** Bluetooth discovery can use platform-specific implementations (Windows: PowerShell via `subprocess` + `Get-PnpDevice`, Linux: native Linux-compatible discovery). Keep behavior consistent across supported platforms.
+- **Windows, Linux and macOS support.** Bluetooth discovery and RFCOMM transport use platform-specific implementations (Windows APIs, Linux BlueZ, macOS IOBluetooth). Keep behavior consistent across supported platforms.
 - **Function-list support (user decision).** Show and enable implemented controls from the selected device's `func_list` and its own `extra_data` options. Do not require `VALIDATED_NOISE_MODELS`, `MODEL_BACKENDS`, EQ model allowlists, experimental opt-ins or per-model hardware certification to enable these controls. Unknown/unimplemented functions remain metadata. Hide and disable custom EQ for now, including profile 10 and the band editor. Keep model-specific protocol/label exceptions where evidence requires them; those are not permission lists.
 - **Dynamic RFCOMM service discovery.** Resolve the selected device's RFCOMM channel by exact service UUID. `RFCOMM_PORT = 6` in `controllers/bluetooth/constants.py` is only a Redmi Buds 6 Play fallback when no service channel is resolved; record `service_uuid=None` and `resolution_source="profile_fallback"`. Do not infer service/auth from a channel or scan channels blindly.
 - **Assets directory bundling.** Build uses `datas=[('assets', 'assets')]` in PyInstaller spec. All UI assets (icon.ico, images) must stay in `assets/` folder.
@@ -39,5 +39,5 @@
 ## Change safety rules
 
 - **Preserve backward compatibility.** Preserve the working connection and packet paths. Enable implemented controls by catalog capability as requested; report concrete protocol failures honestly without adding per-model validation gates.
-- **Do not add external Bluetooth libraries.** Current implementation uses Python's `socket` module directly for RFCOMM. Keep it minimal.
+- **Keep Bluetooth platform bindings minimal.** Windows/Linux use their existing native APIs and Python sockets; macOS uses Apple's IOBluetooth framework through its PyObjC bridge. Do not add third-party Bluetooth protocol libraries.
 - **GitHub URL is contractual.** Hardcoded in UI constants and used by updater. Changes break update checking and links.

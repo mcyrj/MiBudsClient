@@ -1,5 +1,6 @@
 """System tray icon and menu."""
 
+import asyncio
 from typing import Callable, Optional
 import threading
 import sys
@@ -47,11 +48,30 @@ class SystemTray:
         self._image_notifications = ImageNotifications(on_activate=self.on_show)
         self._linux_notifications = LinuxNotifications(on_activate=self.on_show) if sys.platform.startswith("linux") else None
         self._host_monitor = None
+        self._macos_loop = None
 
     @property
     def available(self) -> bool:
         return self._ready.is_set() and not self._stopped.is_set()
-    
+
+    def start(self) -> None:
+        if sys.platform != "darwin":
+            threading.Thread(target=self.run, daemon=True).start()
+            return
+        if self._stopped.is_set() or pystray is None:
+            return
+        try:
+            from utils.macos_tray import MacOSTrayIcon
+
+            self._macos_loop = asyncio.get_running_loop()
+            image = load_pil_image(TRAY_ICON_PATH, TRAY_ICON_SIZE)
+            self.icon = MacOSTrayIcon("MiBudsClient", image, self._tooltip(), self._build_menu())
+            self.icon.start(self._macos_loop)
+            self._ready.set()
+        except Exception as error:
+            print(f"macOS tray unavailable: {error}")
+            self.stop()
+
     def run(self) -> None:
         """Start the system tray icon."""
         if self._stopped.is_set() or pystray is None:
@@ -264,6 +284,10 @@ class SystemTray:
 
     def refresh_menu(self) -> None:
         """Refresh tray menu to reflect updated checked states."""
+        if self._macos_loop and threading.current_thread() is not threading.main_thread():
+            if self.available and not self._macos_loop.is_closed():
+                self._macos_loop.call_soon_threadsafe(self.refresh_menu)
+            return
         icon = self.icon
         if self.available and icon:
             try:
@@ -273,7 +297,6 @@ class SystemTray:
         if self.available and icon and getattr(type(icon), "HAS_MENU", False):
             try:
                 icon.menu = self._build_menu()
-                icon.update_menu()
             except Exception as error:
                 print(f"Tray menu update unavailable: {error}")
 
@@ -342,6 +365,10 @@ class SystemTray:
         icon = self.icon
         if icon:
             try:
-                icon.stop()
+                if self._macos_loop and threading.current_thread() is not threading.main_thread():
+                    if not self._macos_loop.is_closed():
+                        self._macos_loop.call_soon_threadsafe(icon.stop)
+                else:
+                    icon.stop()
             except Exception as error:
                 print(f"Tray stop error: {error}")

@@ -11,6 +11,7 @@ from .constants import BATTERY_UNKNOWN
 from .components.update_notification import show_update_notification
 from .localization import refresh_translations
 from .battery_notifications import BatteryNotificationState
+from utils.battery import battery_state
 from utils.i18n import LANGUAGE_CHOICES, is_rtl, set_language
 from utils.user_preferences import set_language_preference
 from utils.sound import play_connection_melody, play_disconnection_melody
@@ -23,15 +24,17 @@ class AppMessageHandler:
                  latency, tray, debug_console, on_window_show: Callable,
                  get_game_monitor: Callable, on_catalog_stop: Callable | None = None, get_capabilities: Callable | None = None,
                  ui_lock=None, get_identity: Callable | None = None,
-                 get_device_session: Callable | None = None, is_connected: Callable | None = None):
+                 get_device_session: Callable | None = None, is_connected: Callable | None = None,
+                 get_device_address: Callable | None = None):
         self._dispatch_lock = ui_lock if ui_lock is not None else threading.RLock()
         self._closing = False
         self._get_capabilities = get_capabilities
         self._get_identity = get_identity
         self._get_device_session = get_device_session
         self._is_connected = is_connected
-        self._tray_session = None
-        self._tray_battery = (BATTERY_UNKNOWN,) * 3
+        self._get_device_address = get_device_address
+        self._battery_peer = None
+        self._display_battery = (BATTERY_UNKNOWN,) * 3
         self._page = page
         self._device_status_card = device_status_card
         self._settings_card = settings_card
@@ -107,15 +110,13 @@ class AppMessageHandler:
             return
         session = self._get_device_session()
         connected = self._is_connected()
-        if session != self._tray_session or not connected:
-            self._tray_battery = (BATTERY_UNKNOWN,) * 3
-        self._tray_session = session
+        self._sync_battery_peer()
         capabilities = self._get_capabilities()
         self._device_status_card.battery_panel.set_single_body(capabilities.single_body)
         self._battery_notifications.single_body = capabilities.single_body
         self._tray.set_state({
             "session": session, "connected": connected, "name": capabilities.name,
-            "battery": self._tray_battery,
+            "battery": self._display_battery,
             "single_body": capabilities.single_body,
             "eq": self._settings_card.equalizer.tray_state(capabilities),
             "noise": self._settings_card.noise.tray_state(),
@@ -239,40 +240,48 @@ class AppMessageHandler:
         )
         self._update_page()
 
+    def _sync_battery_peer(self) -> None:
+        peer = self._get_device_address() if self._get_device_address is not None else None
+        if peer and peer != self._battery_peer:
+            self._battery_peer = peer
+            self._display_battery = (BATTERY_UNKNOWN,) * 3
+            self._device_status_card.update_battery(*self._display_battery)
+
     def _handle_battery(self, message: dict) -> None:
+        if message.get("transient") or (self._is_connected is not None and not self._is_connected()):
+            return
+        session = message.get("session")
+        if session is not None and self._get_device_session is not None and session != self._get_device_session():
+            return
         left = message.get("left", BATTERY_UNKNOWN)
         right = message.get("right", BATTERY_UNKNOWN)
         case = message.get("case", BATTERY_UNKNOWN)
-        transient = message.get("transient", False)
+        with self._notification_lock:
+            removed = self._battery_notifications.update(left, right, case)
+            inserted = self._battery_notifications.inserted
+            if (self._connection_notification_pending and self._battery_notifications.active
+                    and self._battery_notifications.has_earbud_data):
+                self._cancel_connection_notification()
+                self._tray.notify(self._battery_notifications.body(t("tray.connected")), device=True, silent=True)
+            elif removed or inserted:
+                def event(kind, sides):
+                    key = "both" if len(sides) == 2 else sides[0]
+                    return t("notification." + kind + "_" + key)
 
-        # A transient UI refresh must not overwrite the last real device sample.
-        self.sync_tray()
-        if not transient and self._is_connected is not None and self._is_connected():
-            self._tray_battery = (left, right, case)
+                if removed and inserted:
+                    text = t("notification.case_changes", removed=event("removed", removed),
+                             inserted=event("inserted", inserted))
+                else:
+                    text = event("removed", removed) if removed else event("inserted", inserted)
+                self._tray.notify(self._battery_notifications.body(text), device=True, silent=True)
 
-        if not transient:
-            with self._notification_lock:
-                removed = self._battery_notifications.update(left, right, case)
-                inserted = self._battery_notifications.inserted
-                if (self._connection_notification_pending and self._battery_notifications.active
-                        and self._battery_notifications.has_earbud_data):
-                    self._cancel_connection_notification()
-                    self._tray.notify(self._battery_notifications.body(t("tray.connected")), device=True, silent=True)
-                elif removed or inserted:
-                    def event(kind, sides):
-                        key = "both" if len(sides) == 2 else sides[0]
-                        return t("notification." + kind + "_" + key)
-
-                    if removed and inserted:
-                        text = t("notification.case_changes", removed=event("removed", removed),
-                                 inserted=event("inserted", inserted))
-                    else:
-                        text = event("removed", removed) if removed else event("inserted", inserted)
-                    self._tray.notify(self._battery_notifications.body(text), device=True, silent=True)
-
-        self._device_status_card.update_battery(left, right, case, transient=transient)
-
-        self._update_page()
+        self._sync_battery_peer()
+        display = tuple(value if battery_state(value) is not None else previous
+                        for value, previous in zip((left, right, case), self._display_battery))
+        if display != self._display_battery:
+            self._display_battery = display
+            self._device_status_card.update_battery(*display)
+            self._update_page()
 
     def _handle_firmware_info(self, message: dict) -> None:
         identity = message.get("identity")

@@ -8,11 +8,16 @@ published on 2026-04-13. Its README lists only Redmi Buds 6 Play, and its
 connection code uses a fixed RFCOMM channel. Downloading that EXE does not
 provide the newer catalog, service discovery, authentication or settings UI.
 
-Current source already includes the global Buds 8 Pro catalog record:
-`miwear.headphone.p76gl`, VID `0x2717`, PID `0x50E5`, sale model `M2535E1`.
-The SDK fallback also names PID `0x50E3`; it has no bundled app record of its
-own, so this document does not assign the global variant's functions to it.
-Recognition and successful authentication are separate from feature support.
+The global Buds 8 Pro uses `miwear.headphone.p76gl`, VID `0x2717`, PID `0x50E5`,
+sale model `M2535E1`. The Chinese model `miwear.headphone.p76c` reports
+`0x2717/0x50E3`. Its function list comes from the [Xiaomi app catalog snapshot](https://github.com/kunalagra/OtoControl/blob/d2f1cd1dc256428c57e4bd87188b51b3a6c0ef07/docs/reference/xiaomi-catalog.json)
+and is bundled separately for exact VID/PID lookup when the active catalog
+does not contain that model. It lists ANC gears 0–19 and transparency gears 0–2.
+
+To request a fresh battery reading, leave the charging case open with an earbud
+in it and click the refresh icon next to the battery indicators. The case level
+is displayed when the earbuds report a percentage. A dash indicates that the
+case level is currently unavailable.
 
 ## Available controls from the global catalog
 

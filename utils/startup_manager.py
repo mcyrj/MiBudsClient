@@ -5,6 +5,7 @@ import subprocess
 import configparser
 import io
 import tempfile
+import plistlib
 
 if platform.system() == "Windows":
     import winreg
@@ -96,6 +97,36 @@ def _set_startup_linux(enabled: bool) -> bool:
         print(f"Linux startup error: {e}")
         return False
 
+def _get_macos_agent_path():
+    return os.path.expanduser(f"~/Library/LaunchAgents/dev.mibuds.client.plist")
+
+
+def _macos_agent_plist():
+    return {
+        "Label": "dev.mibuds.client",
+        "ProgramArguments": _startup_arguments(),
+        "RunAtLoad": True,
+        "WorkingDirectory": os.path.dirname(get_executable_path()),
+    }
+
+
+def _set_startup_macos(enabled: bool) -> bool:
+    path = _get_macos_agent_path()
+    try:
+        if enabled:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            temporary = path + ".tmp"
+            with open(temporary, "wb") as output:
+                plistlib.dump(_macos_agent_plist(), output)
+            os.replace(temporary, path)
+        elif os.path.exists(path):
+            os.remove(path)
+        print(f"macOS startup {'enabled' if enabled else 'disabled'}: {path}")
+        return True
+    except Exception as error:
+        print(f"macOS startup error: {error}")
+        return False
+
 def _set_startup_windows(enabled: bool) -> bool:
     """Enable or disable startup with Windows Registry."""
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -120,6 +151,8 @@ def set_startup(enabled: bool) -> bool:
         return _set_startup_windows(enabled)
     elif platform.system() == "Linux":
         return _set_startup_linux(enabled)
+    elif platform.system() == "Darwin":
+        return _set_startup_macos(enabled)
     return False
 
 def _is_startup_enabled_linux() -> bool:
@@ -156,6 +189,8 @@ def is_startup_enabled() -> bool:
         return _is_startup_enabled_windows()
     elif platform.system() == "Linux":
         return _is_startup_enabled_linux()
+    elif platform.system() == "Darwin":
+        return os.path.isfile(_get_macos_agent_path())
     return False
 
 
@@ -196,6 +231,15 @@ def reconcile_startup() -> bool:
                     or value_type != winreg.REG_SZ):
                 if not _set_startup_windows(True):
                     print("Windows startup registration repair failed")
+        elif platform.system() == "Darwin":
+            path = _get_macos_agent_path()
+            if not os.path.isfile(path):
+                return False
+            with open(path, "rb") as source:
+                current = plistlib.load(source)
+            expected = _macos_agent_plist()
+            if current != expected and not _set_startup_macos(True):
+                print("macOS startup registration repair failed")
     except Exception as error:
         print(f"Startup registration check failed: {error}")
     return is_startup_enabled()

@@ -120,6 +120,24 @@ def play_tones(tones: Sequence[tuple[int, int]], *, delay: float = 0.0, daemon: 
                     print(f"Audio playback unavailable: {error}")
                 print("Audio playback unavailable: no Linux player succeeded")
 
+        if sys.platform == "darwin":
+            try:
+                with tempfile.TemporaryDirectory(prefix="mibuds-audio-") as directory:
+                    melody = Path(directory) / "melody.wav"
+                    melody.write_bytes(_tone_wave(tones))
+                    result = subprocess.run(
+                        ["/usr/bin/afplay", str(melody)],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                        timeout=max(3.0, sum(duration for _, duration in tones) / 1000 + 2.0),
+                        check=False,
+                    )
+                if result.returncode == 0:
+                    return
+                detail = result.stderr.decode(errors="replace").strip()[:300]
+                print(f"Audio playback via afplay failed ({result.returncode}): {detail}")
+            except (OSError, subprocess.SubprocessError) as error:
+                print(f"Audio playback unavailable: {error}")
+
         # Last-resort fallback: terminal bell pattern.
         for _, duration in tones:
             try:

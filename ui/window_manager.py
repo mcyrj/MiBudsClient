@@ -13,6 +13,7 @@ from .constants import SETTINGS_WINDOW_HEIGHT, NAVIGATION_TRANSITION_MS
 import subprocess
 import threading
 import time
+import sys
 
 class WindowManager:
     """Handles window visibility and events."""
@@ -26,7 +27,7 @@ class WindowManager:
         self._force_exit_armed = False
         self._on_shutdown = on_shutdown
         self.tray_available = lambda: False
-        self.on_activity_change = lambda active: None
+        self.on_visibility_change = lambda visible: None
         self._fit_revision = 0
         self._content_measurement = None
         self._settings_open = False
@@ -61,7 +62,9 @@ class WindowManager:
         self.page.window.max_height = None
         # GTK's non-resizable windows can reject programmatic size changes too.
         # Keep Linux resizable so Home/Settings content fitting can take effect.
-        self.page.window.resizable = self.page.platform == ft.PagePlatform.LINUX
+        self.page.window.resizable = (
+            self.page.platform == ft.PagePlatform.LINUX or sys.platform == "darwin"
+        )
         self.page.window.maximizable = False
     
     def _setup_handlers(self) -> None:
@@ -72,13 +75,16 @@ class WindowManager:
     def _on_window_event_handler(self, e) -> None:
         """Handle window events."""
         event_type = getattr(e, "type", None)
-        if event_type == ft.WindowEventType.FOCUS:
-            self.on_activity_change(bool(self.page.window.visible and not self.page.window.minimized))
-        elif event_type in (ft.WindowEventType.BLUR, ft.WindowEventType.MINIMIZE):
-            self.on_activity_change(False)
+        if event_type in (ft.WindowEventType.SHOW, ft.WindowEventType.RESTORE):
+            self.on_visibility_change(True)
+        elif event_type in (ft.WindowEventType.HIDE, ft.WindowEventType.MINIMIZE):
+            self.on_visibility_change(False)
         if event_type == ft.WindowEventType.CLOSE:
             if self.page.window.prevent_close:
-                self.hide()
+                if sys.platform == "darwin" and not self.tray_available():
+                    self.close()
+                else:
+                    self.hide()
 
     def set_content_measurement(self, measurement: ft.Screenshot) -> None:
         self._content_measurement = measurement
@@ -162,7 +168,8 @@ class WindowManager:
         # Arm safety-net early so hidden-window edge cases cannot hang forever.
         self._force_exit_after_delay()
 
-        self.show_closing_screen()
+        if self.page.window.visible and not self.page.window.minimized:
+            self.show_closing_screen()
         self._run_window_async(self._close_window, timeout_sec=9.0)
 
     def _run_window_async(self, handler, timeout_sec: float = 1.5) -> bool:
@@ -203,6 +210,10 @@ class WindowManager:
         if self._session_closed:
             return
         try:
+            if sys.platform == "darwin" and not self.page.window.visible:
+                # A quit from the menu bar should leave the hidden window hidden.
+                await self.page.window.destroy()
+                return
             self.page.window.prevent_close = False
             self.page.update()
             await asyncio.wait_for(self.page.window.close(), timeout=1.0)
@@ -283,7 +294,7 @@ class WindowManager:
         self.page.window.visible = True
         self.page.window.minimized = False
         self.page.window.skip_task_bar = False
-        self.on_activity_change(True)
+        self.on_visibility_change(True)
         self._apply_legacy_props(visible=True, minimized=False, skip_task_bar=False)
         self.page.update()
         self._run_window_async(self.page.window.to_front, timeout_sec=0.5)
@@ -292,7 +303,7 @@ class WindowManager:
         """Apply hide state to window."""
         if self._session_closed or self._is_closing:
             return
-        self.on_activity_change(False)
+        self.on_visibility_change(False)
         if not self.tray_available():
             # Keep the taskbar entry as a way back when no tray is ready.
             self.page.window.visible = True

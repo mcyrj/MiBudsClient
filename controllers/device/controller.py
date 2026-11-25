@@ -30,21 +30,23 @@ class DeviceConnection:
     def update_battery(self, left: int, right: int, case: int) -> None:
         if self._stopped.is_set():
             return
-        self._battery_updates.update(left, right, case)
+        controller = self._get_controller()
+        if controller is not None and controller.connected:
+            self._battery_updates.update(left, right, case, session=controller.eq_session)
 
-    def request_battery_delayed(self) -> None:
+    def request_battery_delayed(self, *, user_initiated=False) -> None:
         """Request battery data after the existing one-second startup delay."""
-        threading.Thread(target=self._request_battery_delayed, daemon=True).start()
+        threading.Thread(target=lambda: self._request_battery_delayed(user_initiated), daemon=True).start()
 
-    def _request_battery_delayed(self) -> None:
-        if self._stopped.wait(1):
+    def _request_battery_delayed(self, user_initiated) -> None:
+        if self._stopped.wait(0 if user_initiated else 1):
             return
         controller = self._get_controller()
         if controller is not None and controller.connected:
-            controller.request_battery(user_initiated=False)
+            controller.request_battery(user_initiated=user_initiated)
 
-    def reconnect_on_show(self) -> None:
-        """Reconnect when the window is shown, allowing only one worker at a time."""
+    def reconnect_on_show(self, *, user_initiated: bool = False) -> None:
+        """Reconnect on window show or a retry click, with one worker at a time."""
         controller = self._get_controller()
         if self._stopped.is_set() or controller is None or controller.connected:
             return
@@ -57,7 +59,8 @@ class DeviceConnection:
             try:
                 if self._stopped.is_set():
                     return
-                controller.resume_reconnect_attempts()
+                if not controller.resume_reconnect_attempts(user_initiated=user_initiated):
+                    return
                 self.update_status(m("connection.reconnecting"), "orange")
                 controller.reconnect(force_rediscovery=True)
             finally:

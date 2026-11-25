@@ -1,4 +1,4 @@
-"""Discover connected catalog models on Windows and Linux."""
+"""Discover connected catalog models on Windows, Linux and macOS."""
 
 import subprocess
 import json
@@ -85,8 +85,14 @@ class BluetoothDiscovery:
                     if line.strip() in ("Connected: yes", "Connected: no"):
                         return {"state": "connected" if line.strip().endswith("yes") else "disconnected",
                                 "source": "bluetoothctl"}
+            if sys.platform == "darwin":
+                from .macos_bluetooth import connected_devices
+                connected = any(cls._format_mac(peer) == cls._format_mac(address)
+                                for _, peer in connected_devices())
+                return {"state": "connected" if connected else "disconnected",
+                        "source": "macos_iobluetooth"}
             return {"state": "unknown", "source": sys.platform}
-        except (OSError, subprocess.SubprocessError) as exc:
+        except Exception as exc:
             return {"state": "unknown", "source": sys.platform,
                     "error": f"{type(exc).__name__}: {exc}"}
 
@@ -97,7 +103,7 @@ class BluetoothDiscovery:
     @staticmethod
     def is_supported() -> bool:
         """Check if discovery is supported on current platform."""
-        return sys.platform in ["win32", "linux"]
+        return sys.platform in ["win32", "linux", "darwin"]
     
     @classmethod
     def get_connected_devices(cls, preferred_address=None):
@@ -134,7 +140,12 @@ class BluetoothDiscovery:
                     info = subprocess.check_output(["bluetoothctl", "info", address], text=True, timeout=5, env=env)
                     if "Connected: yes" in info:
                         peers.append((name, address))
-        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            elif sys.platform == "darwin":
+                from .macos_bluetooth import connected_devices
+                peers = [(name, address) for name, address in connected_devices()
+                         if (cls._is_supported_device(name)
+                             or cls._format_mac(address) == preferred_address)]
+        except Exception as exc:
             print(f"[Bluetooth] Discovery: {type(exc).__name__}: {exc}")
         result = {}
         for name, address in peers:
@@ -160,6 +171,9 @@ class BluetoothDiscovery:
                 return cls._get_connected_device_windows()
             elif sys.platform == "linux":
                 return cls._get_connected_device_linux()
+            elif sys.platform == "darwin":
+                devices = cls.get_connected_devices()
+                return devices[0] if devices else None
         except Exception as exc:
             print(f"[Bluetooth] Device discovery failed: {type(exc).__name__}: {exc}")
             return None

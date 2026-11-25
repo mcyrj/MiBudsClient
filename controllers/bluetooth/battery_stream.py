@@ -23,8 +23,6 @@ class BatteryStreamParser:
         statuses = []
         with self._lock:
             for packet in packets:
-                if not is_supported_target(packet.flags):
-                    continue
                 if packet.opcode == 0x02 and not packet.flags & 0x80:
                     if len(packet.payload) < 2 or packet.payload[0]:
                         continue
@@ -35,9 +33,22 @@ class BatteryStreamParser:
                     data, kind = packet.payload[1:], 0
                 else:
                     continue
+                source = f"opcode=0x{packet.opcode:02X} flags=0x{packet.flags:02X}"
                 try:
-                    values = parse_info_fields(data).get(kind)
+                    fields = parse_info_fields(data)
                 except ValueError:
+                    print(f"[Bluetooth] Battery fields {source}: malformed attributes")
+                    continue
+                values = fields.get(kind)
+                layout = ", ".join(f"0x{key:02X}/{len(value)}" for key, value in fields.items())
+                if values is None:
+                    raw = "missing"
+                elif not 1 <= len(values) <= 3:
+                    raw = "unexpected length"
+                else:
+                    raw = values.hex(" ").upper()
+                print(f"[Bluetooth] Battery fields {source}: attributes={layout or '-'} raw={raw}")
+                if not is_supported_target(packet.flags):
                     continue
                 if values is None or not 1 <= len(values) <= 3:
                     continue

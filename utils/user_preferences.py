@@ -141,7 +141,10 @@ def _migrate_legacy_exceptions(settings: Dict[str, Any]) -> bool:
 
 def _settings_file_path() -> str:
     """Return the path to the local settings JSON file."""
-    app_data = os.getenv("APPDATA") or os.path.expanduser("~")
+    if sys.platform == "darwin":
+        app_data = os.path.expanduser("~/Library/Application Support")
+    else:
+        app_data = os.getenv("APPDATA") or os.path.expanduser("~")
     settings_dir = os.path.join(app_data, "MiBudsClient")
     os.makedirs(settings_dir, exist_ok=True)
     return os.path.join(settings_dir, "settings.json")

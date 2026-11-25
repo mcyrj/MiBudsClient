@@ -1,4 +1,4 @@
-"""Bounded SDP lookup through Windows Winsock or Linux BlueZ (no BT packages).
+"""Bounded SDP lookup through Windows, Linux BlueZ or macOS IOBluetooth.
 
 The PowerShell child isolates blocking native SDP calls so cancellation kills
 and reaps the actual query, including WSALookupServiceBegin. Works when frozen.
@@ -106,9 +106,14 @@ public static class MiBudsSdp {
 class PlatformBackend:
     @property
     def resolution_source(self):
+        if sys.platform == "darwin":
+            return "macos_sdp"
         return "linux_sdp" if sys.platform.startswith("linux") else "windows_sdp"
 
     def resolve_rfcomm_channel(self, address, service_uuid, timeout, cancel):
+        if sys.platform == "darwin":
+            from .macos_bluetooth import resolve_rfcomm_channel
+            return resolve_rfcomm_channel(address, service_uuid, timeout, cancel)
         if sys.platform != "win32" and not sys.platform.startswith("linux"):
             return None
         if not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", address):
@@ -200,6 +205,9 @@ class PlatformBackend:
                 process.communicate()
 
     def create_rfcomm_socket(self):
+        if sys.platform == "darwin":
+            from .macos_bluetooth import MacRFCOMMSocket
+            return MacRFCOMMSocket()
         return socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
 
 

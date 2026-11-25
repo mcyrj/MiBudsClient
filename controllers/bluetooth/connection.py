@@ -174,6 +174,8 @@ class BluetoothConnection:
                     last_error = exc
                     self.trace("connection", error=f"{type(exc).__name__}: {exc}")
                     log.warning("RFCOMM stage=connection uuid=%s channel=%s source=%s error=%s", uuid, channel, source, exc)
+                    if source == "macos_sdp" and isinstance(exc, TimeoutError):
+                        raise
                     continue
                 return self._activate_session(result, session_policy, cancel)
             # Only when SDP could not resolve any service. Never label this FD2D.

@@ -129,6 +129,8 @@ def guard_ui_callbacks(root, capture, *, ui_lock=None):
 def queue_directory():
     if sys.platform == 'win32':
         root = Path(os.getenv('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local')
+    elif sys.platform == 'darwin':
+        root = Path.home() / 'Library' / 'Application Support'
     else:
         root = Path(os.getenv('XDG_DATA_HOME') or Path.home() / '.local' / 'share')
     return root / 'MiBudsClient' / 'error_reports'

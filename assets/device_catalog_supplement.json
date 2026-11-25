@@ -1,0 +1,37 @@
+[
+    {
+        "vid": "2717",
+        "pid": "50e3",
+        "name": "REDMI Buds 8 Pro",
+        "model": "miwear.headphone.p76c",
+        "extra_info": {"default_color": 1},
+        "func_list": [
+            {"func_id": 4006, "extra_data": "{\n        \"click_action\": [8, 2, 3, 4, 5, 1]\n}"},
+            {"func_id": 4001, "extra_data": "{\n        \"click_action\": [8, 2, 3, 4, 5, 1]\n}"},
+            {"func_id": 4002, "extra_data": "{\n        \"click_action\": [8, 2, 3, 4, 5, 1]\n}"},
+            {"func_id": 4011, "extra_data": "{\n        \"click_action\": [11, 8]\n}"},
+            {"func_id": 4003, "extra_data": "\n{\n\"click_action\":[8,0,6],\n\"noise_ctrl\":[1,2,3]\n}\n"},
+            {"func_id": 3002, "extra_data": "{}   "},
+            {"func_id": 1005, "extra_data": "{\n        \"tws_gear\": [0, 1, 2]\n}"},
+            {"func_id": 1002, "extra_data": "{\n        \"tws_gear\": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],\n        \"anc_wear_type\": 2\n}"},
+            {"func_id": 2002, "extra_data": "{}   "},
+            {"func_id": 2004, "extra_data": "{}   "},
+            {"func_id": 2009, "extra_data": "{\n     \"sound_render\":{\n        \"app_version\":\"\",\n        \"fw_version\":\"\",\n        \"scenes\":[1,2,3,4,5]\n     }\n}"},
+            {"func_id": 2016, "extra_data": "{\"sound_effect\": {\"app_version\": \"\",\"fw_version\": \"\",\"effects\": [0, 5, 1, 6, 10]}}"},
+            {"func_id": 2008, "extra_data": "{}   "},
+            {"func_id": 3004, "extra_data": "{}   "},
+            {"func_id": 5001, "extra_data": "{}   "},
+            {"func_id": 3003, "extra_data": "{\"icon\":[{\"color\":1,\"icon_url\":\"https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/贴合度检测国内-白色.png\"},{\"color\":2,\"icon_url\":\"https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/贴合度检测国内-锖色.png\"},{\"color\":3,\"icon_url\":\"https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/贴合度检测国内-蓝色.png\"}]}"},
+            {"func_id": 3008, "extra_data": "{}   "},
+            {"func_id": 1008, "extra_data": "{}"},
+            {"func_id": 5002, "extra_data": "{}"},
+            {"func_id": 1009, "extra_data": "{\"mode\":[1,2,3,0]}"},
+            {"func_id": 2020, "extra_data": "{\"mode\":[0,1]}"}
+        ],
+        "icon_static": [
+            {"color": 1, "icon_url": "https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/首页设备图国内-白.png"},
+            {"color": 2, "icon_url": "https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/首页设备图国内-黑.png"},
+            {"color": 3, "icon_url": "https://cdn.cnbj1.fds.api.mi-img.com/static-files/tws_icon/首页设备图国内-蓝.png"}
+        ]
+    }
+]

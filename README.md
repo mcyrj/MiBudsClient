@@ -9,11 +9,11 @@
 **Your Xiaomi and Redmi earbuds, on your desktop.**
 
 Monitor battery levels and manage noise control, EQ presets, touch gestures, and low-latency mode.<br>
-Built with Python and Flet for Windows and Linux.
+Built with Python and Flet for Windows, Linux, and macOS.
 
-[**Download**](https://github.com/CesurPolat/MiBudsClient/releases) · [Getting started](#getting-started) · [Run from source](#run-from-source) · [Report an issue](https://github.com/CesurPolat/MiBudsClient/issues)
+[**Download**](https://github.com/mcyrj/MiBudsClient/releases) · [Getting started](#getting-started) · [Run from source](#run-from-source) · [Report an issue](https://github.com/mcyrj/MiBudsClient/issues)
 
-<a href="https://github.com/CesurPolat/MiBudsClient/releases"><img src="docs/MiBudsClientPreview.png" alt="MiBudsClient desktop interface preview" width="720"></a>
+<a href="https://github.com/mcyrj/MiBudsClient/releases"><img src="docs/MiBudsClientPreview.png" alt="MiBudsClient desktop interface preview" width="720"></a>
 
 </div>
 
@@ -41,6 +41,7 @@ Built with Python and Flet for Windows and Linux.
 | Implemented controls | Battery monitoring, ANC/transparency, EQ presets, supported touch gestures and low latency. Controls and choices depend on the model; battery readings depend on what the device reports. |
 | Windows connection | Discovers the RFCOMM channel from the device's Bluetooth service. Supports command authentication on MIUI SPP (FD2D) and raw authentication on XiaoAI/standard SPP. |
 | Linux connection | BlueZ SDP records resolve RFCOMM channels by exact service UUID. Authentication follows the selected service, as on Windows. Redmi Buds 6 Play retains its channel-6 fallback only when no service channel is resolved. Hardware compatibility still depends on the device and firmware. |
+| macOS connection | Apple IOBluetooth resolves the selected service UUID and opens its RFCOMM channel. Install the IOBluetooth PyObjC bridge from `requirements.txt`. Hardware compatibility still depends on the device and firmware. |
 | Hardware evidence | Redmi Buds 6 Play is the project's hardware reference, with recorded battery/low-latency use and dated EQ/gesture checks below. This does not establish every feature on every model; ANC/transparency and raw authentication still need hardware confirmation. |
 
 Custom EQ is deferred and hidden, including the custom preset. Other catalog features do not become app controls automatically. Feature availability comes from the catalog; connection success and the device's replies determine whether an operation can complete. Firmware and regional variants can differ.
@@ -54,7 +55,7 @@ MiBudsClient is an independent community project and is not affiliated with Xiao
 ## Getting started
 
 1. Pair your Xiaomi or Redmi earbuds and connect them in your computer's Bluetooth settings.
-2. Download a packaged build for your platform from [Releases](https://github.com/CesurPolat/MiBudsClient/releases), or [run from source](#run-from-source).
+2. Download the Apple Silicon build from [Releases](https://github.com/mcyrj/MiBudsClient/releases). For Windows and Linux, see [upstream releases](https://github.com/CesurPolat/MiBudsClient/releases) or [run from source](#run-from-source).
 3. Launch MiBudsClient. It looks for connected catalog devices and attempts a Bluetooth control connection automatically.
 4. Once connected, check the battery cards and the controls available for your model. Open **Settings** for supported gestures, EQ, noise control, startup, and language preferences.
 
@@ -62,7 +63,7 @@ Pairing is handled by your operating system. MiBudsClient needs an existing Blue
 
 Only one instance runs at a time. Launching the app again brings the existing window forward. Use the tray's **Quit** command to exit completely.
 
-Press **F12** for runtime logs. On Linux, focus MiBudsClient to open its in-app console, select/copy logs or clear the buffer; F12 closes it again. Windows retains its separate native console. Log capture continues while the console is closed.
+Press **F12** for runtime logs. On Linux and macOS, focus MiBudsClient to open its in-app console, select/copy logs or clear the buffer; F12 closes it again. Windows retains its separate native console. Log capture continues while the console is closed.
 
 ## Make it yours
 
@@ -104,10 +105,10 @@ Available languages: Arabic, Chinese (Simplified, Taiwan, Hong Kong), Dutch, Eng
 
 ## Run from source
 
-You need Python with `venv` and `pip`, a Bluetooth adapter, and earbuds already connected through the operating system.
+You need Python with `venv` and `pip`, a Bluetooth adapter, and earbuds paired and connected through the operating system.
 
 ```sh
-git clone https://github.com/CesurPolat/MiBudsClient.git
+git clone https://github.com/mcyrj/MiBudsClient.git
 cd MiBudsClient
 ```
 
@@ -127,6 +128,16 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
+**macOS**
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+Pair and connect the earbuds in **System Settings → Bluetooth** before starting the app. The first Bluetooth access may require granting macOS Bluetooth permission to the terminal or packaged application. Closing the window keeps the app in the menu bar. Right-click the Mi Buds Client icon and choose **Open** or **Quit**. Use manual low-latency mode on macOS.
+
 On Linux, Bluetooth discovery requires BlueZ's `bluetoothctl`; dynamic RFCOMM service discovery also requires `sdptool` (some distributions package it separately). Linux notifications require PyGObject (`gi`) with Gio/GLib and a desktop notification server; they do not require a tray icon or GTK widgets. AppIndicator host detection uses `gdbus`. Tray integration prefers PyGObject (`gi`) with GTK 3 and AppIndicator3 or AyatanaAppIndicator3, then falls back to GTK's legacy tray or Xorg when available. Desktop tray support is still required; Xorg has limited menu support. Missing tray dependencies do not prevent startup. Until the tray is ready, closing the window minimizes it with its taskbar entry retained; an unexpected tray shutdown restores the window. An explicit `PYSTRAY_BACKEND` setting is respected. Automatic fullscreen detection also needs `xprop`, `xwininfo`, and `xrandr` in an X11 session. These are system dependencies; `requirements.txt` installs the Python packages only.
 
 ## Troubleshooting
@@ -141,7 +152,7 @@ On Linux, Bluetooth discovery requires BlueZ's `bluetoothctl`; dynamic RFCOMM se
 | Auto mode does not switch on Linux | Check that you are using X11 and the fullscreen-detection tools above are installed. On GNOME 46 Wayland, the [fullscreen bridge](docs/wayland.md) installs automatically; log out and back in if prompted. KDE Plasma 6 (`kdotool` with `kwinscript`), Sway (`swaymsg`) and Hyprland (`hyprctl`) also have compositor-specific detectors. These three backends still need live desktop validation. |
 | Clicking a Linux notification does nothing | Check whether your desktop notification server supports default actions. Restore the window through the tray. |
 
-When [reporting an issue](https://github.com/CesurPolat/MiBudsClient/issues), include the app version, OS and desktop session, earbud model, steps to reproduce, and any error details shown by the app.
+When [reporting an issue](https://github.com/mcyrj/MiBudsClient/issues), include the app version, OS and desktop session, earbud model, steps to reproduce, and any error details shown by the app.
 
 ## Development
 
@@ -188,10 +199,23 @@ flet pack main.py --icon assets\icon.ico --add-data "assets:assets" --name "MiBu
 python tools/build_linux.py
 ```
 
+**macOS**
+
+On an Apple Silicon Mac, install the project requirements and run the builder.
+
+```sh
+python -m pip install -r requirements.txt pyinstaller==6.21.0
+python tools/build_macos.py
+```
+
+The builder writes a ZIP containing `MiBudsClient.app` to `dist/`. The app uses an ad hoc signature and has no Apple notarization. If macOS blocks the first launch, review the download source, then use **System Settings → Privacy & Security → Open Anyway**.
+
+If a menu bar manager hides the icon, move the MiBudsClient item to its visible section. When running from source, Bartender may list it as **Python**.
+
 To wrap the Linux executable in an AppImage, run `bash tools/build_appimage.sh` with `appimagetool` installed. See the [AppImage packaging instructions](docs/linux-desktop.md#appimage-packaging) for preparation-only mode and output paths.
 
 Keep all UI resources under `assets/` so they are included in the package. Before shipping, launch the executable, verify its behavior with the earbuds, then launch it a second time to check that it focuses the existing window and exits silently.
 
 ## License
 
-MiBudsClient is licensed under the [GNU General Public License v3.0](LICENSE).
+Cesur Polat and the contributors to [CesurPolat/MiBudsClient](https://github.com/CesurPolat/MiBudsClient) developed the original project. This macOS fork preserves the [GNU General Public License v3.0](LICENSE). See [NOTICE.md](NOTICE.md) for attribution and changes.

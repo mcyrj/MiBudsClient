@@ -2,3 +2,4 @@
 flet[desktop]==0.84.0
 pystray
 Pillow
+pyobjc-framework-IOBluetooth; sys_platform == "darwin"
