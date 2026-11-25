@@ -7,6 +7,7 @@ import threading
 from typing import Callable
 
 from utils.startup_manager import reconcile_startup, set_startup
+from utils.updater import fetch_latest_release
 from ui.components.settings_card import SettingsCard
 from .gestures import GestureSettingsController
 from .equalizer import EqSettingsController
@@ -39,6 +40,7 @@ class SettingsController:
             on_wait_until_app_close_change=latency.on_wait_until_app_close_change,
             on_check_battery=lambda _: controller.request_battery(),
             on_startup_toggle=self.on_startup_change,
+            on_check_update=self.on_check_update,
             startup_enabled=reconcile_startup(),
             low_latency_mode=latency.state["selected_mode"],
             active_platform=latency.platform_key,
@@ -67,6 +69,30 @@ class SettingsController:
             self._device_connection.update_status(m("startup.failed"), "red")
             e.control.value = not enabled
             self._on_update()
+
+    def on_check_update(self, _):
+        if self.card.update_item.disabled:
+            return
+        self.card.set_update_result(m("update.checking"), pending=True)
+        self._on_update()
+
+        def check():
+            download_url = None
+            try:
+                release = fetch_latest_release()
+                if release is None:
+                    status = m("update.no_release")
+                elif release.is_newer:
+                    status = m("update.available", version=release.version)
+                    download_url = release.download_url or release.release_url
+                else:
+                    status = m("update.up_to_date")
+            except (OSError, ValueError) as exc:
+                print(f"Error checking for updates: {exc}")
+                status = m("update.check_failed")
+            self._publish({"type": "update_check_result", "status": status, "download_url": download_url})
+
+        threading.Thread(target=check, daemon=True).start()
 
     def on_check_device_identity(self, e):
         if self.card.identity_item.disabled:

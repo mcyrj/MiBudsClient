@@ -9,6 +9,7 @@ from utils.user_preferences import get_language_preference
 from typing import Callable, Optional
 
 from ..constants import (
+    APP_VERSION,
     COLOR_HOME_SURFACE,
     COLOR_HOME_SURFACE_TOP,
     COLOR_HOME_BORDER,
@@ -21,6 +22,7 @@ from ..constants import (
     COLOR_DIVIDER,
     CARD_BORDER_RADIUS,
     COLOR_DISABLED,
+    COLOR_TEXT_PRIMARY,
     HOME_CONTROLS_HEIGHT,
 )
 
@@ -63,6 +65,7 @@ class SettingsCard(ft.Container):
         on_language_change: Optional[Callable] = None,
         on_eq_action: Optional[Callable] = None,
         on_noise_action: Optional[Callable] = None,
+        on_check_update: Optional[Callable] = None,
     ):
         self._capabilities = DeviceCapabilities()
         self._connected = False
@@ -169,12 +172,25 @@ class SettingsCard(ft.Container):
             expand=True,
         )
         self._language_container = ft.Container(content=self.language_selector, padding=10)
+        self.update_item = SettingItem(
+            ft.Icons.SYSTEM_UPDATE_ALT, "blue_700", t("update.check"), on_click=on_check_update,
+        )
+        self.update_item.subtitle = ft.Text(
+            t("update.current", version=APP_VERSION), size=12, color=COLOR_DISABLED,
+        )
+        self.update_status = ft.Text(size=12, color=COLOR_TEXT_PRIMARY, visible=False)
+        self.update_download = ft.TextButton(
+            t("update.download"), icon=ft.Icons.DOWNLOAD, visible=False,
+        )
         self._on_update = on_update
         self._selected_section = "general"
         self._sections = {
             "general": ft.Container(
                 content=ft.Column([self.startup_item, ft.Divider(height=1, color=COLOR_DIVIDER),
-                                   self._language_container], spacing=6),
+                                   self._language_container, ft.Divider(height=1, color=COLOR_DIVIDER),
+                                   self.update_item,
+                                   ft.Container(content=ft.Column([self.update_status, self.update_download], spacing=4),
+                                                padding=ft.Padding.symmetric(horizontal=10))], spacing=6),
                 padding=0),
             "auto": self.auto_settings,
             "gestures": self.gestures, "identity": self.identity_section,
@@ -206,6 +222,13 @@ class SettingsCard(ft.Container):
             padding=14
         )
         self._render_capabilities()
+
+    def set_update_result(self, status, *, pending=False, download_url=None):
+        self.update_item.disabled = pending
+        self.update_status.value = render(status)
+        self.update_status.visible = True
+        self.update_download.url = download_url
+        self.update_download.visible = bool(download_url)
 
     def set_capabilities(self, capabilities):
         if capabilities != self._capabilities:

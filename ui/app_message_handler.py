@@ -72,6 +72,7 @@ class AppMessageHandler:
             "latency": self._handle_latency,
             "auto_hold_released": self._handle_auto_hold_released,
             "update_notification": self._handle_update_notification,
+            "update_check_result": self._handle_update_check_result,
             "app": self._handle_app,
             "debug_console": self._handle_debug_console,
             "connection_event": self._handle_connection_event,
@@ -356,6 +357,10 @@ class AppMessageHandler:
 
     def _handle_update_notification(self, message: dict) -> None:
         show_update_notification(self._page, message.get("latest_ver"))
+
+    def _handle_update_check_result(self, message: dict) -> None:
+        self._settings_card.set_update_result(message["status"], download_url=message.get("download_url"))
+        self._update_page()
 
     def _handle_app(self, message: dict) -> None:
         if message.get("action") != "close":

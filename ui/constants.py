@@ -4,7 +4,7 @@
 # App Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 APP_TITLE = "MiBudsClient"
-APP_VERSION = "v0.3.3"
+APP_VERSION = "v0.3.4"
 GITHUB_URL = "https://github.com/mcyrj/MiBudsClient"
 WINDOW_WIDTH = 655
 WINDOW_HEIGHT = 400

@@ -1,9 +1,13 @@
 import json
+import platform
+import sys
 import urllib.request
 import urllib.error
 import re
 import threading
 import time
+from dataclasses import dataclass
+from http.client import HTTPException
 from typing import Callable, Optional, Tuple
 from ui.constants import APP_VERSION, GITHUB_URL
 from .user_preferences import should_show_update_notification
@@ -61,51 +65,63 @@ def parse_version(version_str: str) -> Tuple[int, ...]:
     
     return (int(major), int(minor), int(patch), type_val, num_val)
 
-def check_for_updates() -> Tuple[bool, Optional[str]]:
-    """
-    Checks GitHub for a newer release.
-    Returns (True, latest_version) if a newer version is available,
-    (False, None) otherwise.
-    """
+@dataclass(frozen=True)
+class Release:
+    version: str
+    release_url: str
+    download_url: str | None = None
+
+    @property
+    def is_newer(self) -> bool:
+        return parse_version(self.version) > parse_version(APP_VERSION)
+
+
+def fetch_latest_release() -> Release | None:
+    """Read the latest stable release. None means GitHub has no stable release."""
+    repository = GITHUB_URL.rstrip('/')
+    owner, repo = repository.rsplit('/', 2)[-2:]
+    request = urllib.request.Request(
+        f'https://api.github.com/repos/{owner}/{repo}/releases/latest',
+        headers={'User-Agent': 'MiBudsClient-Updater', 'Accept': 'application/vnd.github+json'},
+    )
     try:
-        # Extract owner and repo from GITHUB_URL
-        parts = GITHUB_URL.rstrip("/").split("/")
-        if len(parts) < 5:
-            return False, None
-        
-        owner = parts[-2]
-        repo = parts[-1]
-        
-        # GitHub's latest endpoint excludes pre-releases and drafts, including
-        # when many test builds have been published since the stable release.
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-        
-        req = urllib.request.Request(
-            api_url, 
-            headers={"User-Agent": "MiBudsClient-Updater"}
-        )
-        
-        with urllib.request.urlopen(req, timeout=5) as response:
-            if response.getcode() == 200:
-                latest_release = json.loads(response.read().decode())
-                if (not isinstance(latest_release, dict) or not latest_release
-                        or latest_release.get("prerelease") or latest_release.get("draft")):
-                    return False, None
-                
-                latest_tag = latest_release.get("tag_name")
-                
-                if latest_tag:
-                    local_v = parse_version(APP_VERSION)
-                    latest_v = parse_version(latest_tag)
-                    
-                    if latest_v > local_v:
-                        return True, latest_tag
-                    
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return False, None
-        print(f"HTTP Error checking for updates: {e}")
-    except Exception as e:
-        print(f"Error checking for updates: {e}")
-        
+        with urllib.request.urlopen(request, timeout=5) as response:
+            release = json.load(response)
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        if exc.code == 404:
+            return None
+        raise
+    except HTTPException as exc:
+        raise OSError('Could not read the GitHub release response') from exc
+
+    if not isinstance(release, dict):
+        raise ValueError('Invalid GitHub release response')
+    if release.get('draft') or release.get('prerelease'):
+        return None
+    version = release.get('tag_name')
+    if not isinstance(version, str) or not re.fullmatch(r'v?\d+\.\d+\.\d+', version):
+        raise ValueError('Invalid stable release version')
+
+    release_url = f'{repository}/releases/tag/{version}'
+    download_url = None
+    if sys.platform == 'darwin' and platform.machine() == 'arm64':
+        package = f'MiBudsClient-{version}-macOS-arm64.zip'
+        assets = release.get('assets')
+        if isinstance(assets, list) and any(
+            isinstance(asset, dict) and asset.get('name') == package
+            and asset.get('state') == 'uploaded' for asset in assets
+        ):
+            download_url = f'{repository}/releases/download/{version}/{package}'
+    return Release(version, release_url, download_url)
+
+
+def check_for_updates() -> Tuple[bool, Optional[str]]:
+    """Return a newer version for the automatic startup notification."""
+    try:
+        release = fetch_latest_release()
+        if release and release.is_newer:
+            return True, release.version
+    except (OSError, ValueError) as exc:
+        print(f'Error checking for updates: {exc}')
     return False, None
