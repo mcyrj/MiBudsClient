@@ -1,13 +1,16 @@
-"""Flet consent dialog; no delivery occurs before the Send action."""
+"""Prepare a report for the user to post on GitHub."""
+import asyncio
 import copy
 import json
 import threading
+import webbrowser
 from functools import wraps
+from textwrap import indent
 
 import flet as ft
 from utils.i18n import t
-from utils.error_reports import encode_report, redact
-from ui.constants import COLOR_CARD_BG, COLOR_TEXT_PRIMARY, CARD_BORDER_RADIUS
+from utils.error_reports import redact
+from ui.constants import COLOR_TEXT_PRIMARY, GITHUB_URL
 
 
 def serialized(method):
@@ -19,11 +22,11 @@ def serialized(method):
 
 
 class ErrorReportDialog:
-    def __init__(self, page, queue, *, ui_lock=None):
-        self.page, self.queue = page, queue
+    def __init__(self, page, *, ui_lock=None):
+        self.page = page
+        self._clipboard = ft.Clipboard()
         self.pending = []
         self.active = None
-        self.snack = None
         self._lock = ui_lock if ui_lock is not None else threading.RLock()
 
     @serialized
@@ -70,28 +73,34 @@ class ErrorReportDialog:
                 self.active = None
             self.show_pending()
 
-        @synchronized
-        def send(e):
-            if send_button.disabled:
-                return
-            send_button.disabled = True
-            try:
+        async def open_issue(e):
+            with self._lock:
+                if send_button.disabled:
+                    return
+                send_button.disabled = True
+                cancel_button.disabled = True
+                feedback.visible = False
                 update_preview()
-                encode_report(report)
-                saved = self.queue.enqueue(copy.deepcopy(report))
+                body = '\n\n' + indent(preview.value, '    ')
+                dialog.update()
+            try:
+                await self._clipboard.set(body)
+                opened = await asyncio.to_thread(
+                    webbrowser.open, f'{GITHUB_URL}/issues/new?template=bug_report.md')
             except Exception:
-                saved = False
-            if saved:
-                close()
-                self.status('queued')
-            else:
-                # Retain the user's description and allow another attempt.
+                opened = False
+            with self._lock:
+                if self.active is not dialog or not dialog.open:
+                    return
                 send_button.disabled = False
-                feedback.value = t('report.failed')
+                cancel_button.disabled = False
+                feedback.value = t('report.copied' if opened else 'report.open_failed')
+                feedback.color = COLOR_TEXT_PRIMARY if opened else ft.Colors.RED
                 feedback.visible = True
                 dialog.update()
 
-        send_button = ft.ElevatedButton(t('report.send'), on_click=send)
+        send_button = ft.ElevatedButton(t('report.open_github'), on_click=open_issue)
+        cancel_button = ft.TextButton(t('report.cancel'), on_click=close)
         dialog = ft.AlertDialog(
             modal=True, title=ft.Text(t('report.title')),
             content=ft.Container(width=420, content=ft.Column([
@@ -101,22 +110,8 @@ class ErrorReportDialog:
                 ft.ExpansionTile(title=ft.Text(t('report.preview')), controls=[preview]),
                 feedback,
             ], tight=True, scroll=ft.ScrollMode.AUTO)),
-            actions=[ft.TextButton(t('report.cancel'), on_click=close), send_button],
+            actions=[cancel_button, send_button],
         )
         self.active = dialog
         dialog.on_dismiss = dismissed
         self.page.show_dialog(dialog)
-
-    @serialized
-    def status(self, state):
-        if self.snack is not None and self.snack.open:
-            self.snack.open = False
-            self.snack.update()
-        snack = ft.SnackBar(
-            content=ft.Text(t('report.' + state), color=COLOR_TEXT_PRIMARY),
-            bgcolor=COLOR_CARD_BG,
-            behavior=ft.SnackBarBehavior.FLOATING,
-            shape=ft.RoundedRectangleBorder(radius=CARD_BORDER_RADIUS),
-        )
-        self.snack = snack
-        self.page.show_dialog(snack)

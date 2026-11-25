@@ -1,16 +1,12 @@
-import io
 import json
 from pathlib import Path
-import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from urllib.error import HTTPError
 
-from utils.error_reports import (DeliveryError, ErrorReportClient, ErrorReportManager,
-                                 ReportQueue, encode_report, make_report, redact,
-                                 guard_ui_callbacks, queue_directory)
+from utils.error_reports import (ErrorReportManager, encode_report, guard_ui_callbacks,
+                                 make_report, redact)
 from ui.components.error_report import ErrorReportDialog
 from utils.debug_console import DebugConsoleManager
 
@@ -57,12 +53,6 @@ class ErrorReportTests(unittest.TestCase):
         button.on_click(None)
         self.assertIsInstance(capture.call_args.args[0], ValueError)
 
-    def test_platform_queue_paths(self):
-        with patch('utils.error_reports.sys.platform', 'win32'), patch.dict('os.environ', {'LOCALAPPDATA': 'local-data'}):
-            self.assertEqual(queue_directory(), Path('local-data/MiBudsClient/error_reports'))
-        with patch('utils.error_reports.sys.platform', 'linux'), patch.dict('os.environ', {'XDG_DATA_HOME': 'linux-data'}):
-            self.assertEqual(queue_directory(), Path('linux-data/MiBudsClient/error_reports'))
-
     def test_redaction_and_stack_excludes_source(self):
         try:
             raise ValueError('token=abc password=xyz AA:BB:CC:DD:EE:FF user@example.com https://host/private')
@@ -91,56 +81,23 @@ class ErrorReportTests(unittest.TestCase):
         publish.side_effect = RuntimeError('reporter failed')
         manager.capture(ValueError('different'))
 
-    def test_dialog_consent_hidden_preview_and_double_send(self):
+    def test_dialog_hidden_preview(self):
         page = self.report_page(visible=False)
-        queue = Mock()
-        dialog = ErrorReportDialog(page, queue)
+        dialog = ErrorReportDialog(page)
         dialog.receive(make_report(ValueError('test')))
-        queue.enqueue.assert_not_called()
         self.assertIsNone(dialog.active)
         page.window.visible = True
         dialog.show_pending()
-        control = dialog.active
-        field = next(child for child in control.content.content.controls
-                     if hasattr(child, 'on_change'))
+        controls = dialog.active.content.content.controls
+        field = next(child for child in controls if hasattr(child, 'on_change'))
         field.value = 'I clicked connect'
         field.on_change(None)
-        preview = next(child for child in control.content.content.controls
-                       if hasattr(child, 'controls')).controls[0]
+        preview = next(child for child in controls if hasattr(child, 'controls')).controls[0]
         self.assertEqual(json.loads(preview.value)['details']['description'], field.value)
-        button = control.actions[1]
-        button.on_click(None)
-        button.on_click(None)
-        queue.enqueue.assert_called_once()
-        self.assertFalse(control.open)
-        self.assertIs(dialog.active, control)  # Retained until native dismiss acknowledgement.
-        self.assertEqual(page.overlay, [])
-        control.on_dismiss(None)
-        dialog.receive(make_report(ValueError('cancel')))
-        dialog.active.actions[0].on_click(None)
-        queue.enqueue.assert_called_once()
-
-    def test_save_failure_keeps_description_and_enables_retry(self):
-        page, queue = self.report_page(), Mock()
-        queue.enqueue.side_effect = [False, True]
-        manager = ErrorReportDialog(page, queue)
-        manager.receive(make_report(ValueError('test')))
-        control = manager.active
-        field = control.content.content.controls[1]
-        field.value = 'opening the app'
-        send = control.actions[1]
-        send.on_click(None)
-        self.assertFalse(send.disabled)
-        self.assertTrue(control.open)
-        self.assertEqual(field.value, 'opening the app')
-        self.assertTrue(control.content.content.controls[-1].visible)
-        send.on_click(None)
-        self.assertEqual(queue.enqueue.call_count, 2)
-        self.assertFalse(control.open)
 
     def test_pending_dialog_waits_for_native_dismissal(self):
         page = self.report_page()
-        manager = ErrorReportDialog(page, Mock())
+        manager = ErrorReportDialog(page)
         manager.receive(make_report(ValueError('first')))
         first = manager.active
         manager.receive(make_report(ValueError('second')))
@@ -149,18 +106,6 @@ class ErrorReportTests(unittest.TestCase):
         first.on_dismiss(None)
         self.assertIsNot(manager.active, first)
         self.assertEqual(page.show_dialog.call_count, 2)
-
-    def test_status_uses_managed_dialogs_without_removing_overlay_controls(self):
-        page = self.report_page()
-        existing = object()
-        page.overlay.append(existing)
-        manager = ErrorReportDialog(page, Mock())
-        manager.status('queued')
-        first = manager.snack
-        manager.status('sent')
-        self.assertFalse(first.open)
-        first.update.assert_called_once()
-        self.assertEqual(page.overlay, [existing])
 
     def test_hooks_preserve_original(self):
         callback = Mock()
@@ -173,62 +118,6 @@ class ErrorReportTests(unittest.TestCase):
         manager._orig_threading_hook = Mock()
         manager._handle_thread_exception(SimpleNamespace(exc_type=ValueError, exc_value=error, exc_traceback=None))
         self.assertEqual(callback.call_count, 2)
-
-    def test_http_contract_and_retry_after(self):
-        response = Mock(status=201)
-        response.read.return_value = b'{"id":"550e8400-e29b-41d4-a716-446655440000","received_at":"2026-10-30T00:00:00Z"}'
-        response.__enter__ = Mock(return_value=response)
-        response.__exit__ = Mock(return_value=False)
-        transport = Mock(return_value=response)
-        client = ErrorReportClient(transport=transport)
-        client.send(make_report(ValueError('test')))
-        request = transport.call_args.args[0]
-        self.assertEqual(request.method, 'POST')
-        self.assertEqual(request.get_header('User-agent'), 'MiBudsClient/dev')
-        self.assertNotIn('X-mibuds-install-id', request.headers)
-        client.send(make_report(ValueError('test'), app_version='v1.2.3'))
-        self.assertEqual(transport.call_args.args[0].get_header('User-agent'), 'MiBudsClient/1.2.3')
-        response.read.return_value = b'{}'
-        with self.assertRaises(DeliveryError):
-            client.send(make_report(ValueError('test')))
-        transport.side_effect = HTTPError('http://example', 429, '', {'Retry-After': '600'}, io.BytesIO())
-        with self.assertRaises(DeliveryError) as raised:
-            client.send(make_report(ValueError('test')))
-        self.assertEqual(raised.exception.delay, 600)
-
-    def test_durable_retries_capacity_expiration(self):
-        with tempfile.TemporaryDirectory() as directory:
-            now = [1000.0]
-            client = Mock()
-            client.send.side_effect = DeliveryError(True)
-            queue = ReportQueue(directory=directory, client=client, clock=lambda: now[0])
-            self.assertTrue(queue.enqueue(make_report(ValueError('test'))))
-            client.send.assert_not_called()
-            for delay in (60, 300, 1800, 7200):
-                queue.process_due()
-                record = json.loads(next(Path(directory).glob('*.json')).read_text())
-                self.assertEqual(record['next'], now[0] + delay)
-                now[0] += delay
-                queue = ReportQueue(directory=directory, client=client, clock=lambda: now[0])
-            queue.process_due()
-            self.assertEqual(client.send.call_count, 5)
-            self.assertEqual(list(Path(directory).glob('*.json')), [])
-            for _ in range(20):
-                self.assertTrue(queue.enqueue(make_report(ValueError('test'))))
-            self.assertFalse(queue.enqueue(make_report(ValueError('full'))))
-            now[0] += 7 * 86400
-            self.assertTrue(queue.enqueue(make_report(ValueError('expired'))))
-
-    def test_success_and_terminal_failure_delete_queue(self):
-        for failure in (None, DeliveryError(False)):
-            with tempfile.TemporaryDirectory() as directory:
-                client, notify = Mock(), Mock()
-                client.send.side_effect = failure
-                queue = ReportQueue(directory=directory, client=client, notify=notify)
-                queue.enqueue(make_report(ValueError('test')))
-                queue.process_due()
-                self.assertEqual(list(Path(directory).glob('*.json')), [])
-                notify.assert_called_once_with('failed' if failure else 'sent')
 
 
 if __name__ == '__main__':

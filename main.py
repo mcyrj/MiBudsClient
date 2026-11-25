@@ -31,7 +31,7 @@ from controllers.latency import LatencyController
 from utils.i18n import is_rtl, set_language
 from utils.user_preferences import get_language_preference
 from ui.localization import refresh_translations
-from utils.error_reports import ErrorReportManager, ReportQueue, guard_ui_callbacks
+from utils.error_reports import ErrorReportManager, guard_ui_callbacks
 from ui.components.error_report import ErrorReportDialog
 from ui.components.debug_console import DebugConsoleDialog
 from utils.app_shutdown import ApplicationShutdown
@@ -99,18 +99,13 @@ async def main(page: ft.Page):
         "instance": None,
         "game_monitor": None,
     }
-    report_queue = ReportQueue(
-        notify=lambda state: publish({'type': 'error_report_status', 'state': state}),
-        on_report_status=lambda status: publish({'type': 'connection_report_status', **status}),
-    )
     reports = ErrorReportManager(
         publish=publish, app_version=APP_VERSION,
         get_device=lambda: (getattr(controller_ref['instance'], 'diagnostic_identity', None) or {}).get('device_name', ''),
         get_identity=lambda: getattr(controller_ref['instance'], 'diagnostic_identity', None),
     )
     application_shutdown.register("F12 listener", debug_console.stop_f12_hotkey_listener)
-    application_shutdown.register("error reports", report_queue.stop)
-    report_dialog = ErrorReportDialog(page, report_queue, ui_lock=ui_lock)
+    report_dialog = ErrorReportDialog(page, ui_lock=ui_lock)
     debug_console.on_exception = reports.capture
     page.on_error = lambda e: reports.capture(RuntimeError(str(getattr(e, 'data', '') or 'Flet error').splitlines()[0]), 'ui')
 
@@ -277,13 +272,8 @@ async def main(page: ft.Page):
                 if kind == 'error_report':
                     report_dialog.receive(message['report'])
                     return True
-                if kind == 'error_report_status':
-                    report_dialog.status(message['state'])
-                    return True
-                if kind == 'app' and message.get('action') == 'close':
-                    report_queue.stop()
         except Exception as exc:
-            if not isinstance(message, dict) or message.get('type') not in {'error_report', 'error_report_status', 'report_exception'}:
+            if not isinstance(message, dict) or message.get('type') not in {'error_report', 'report_exception'}:
                 reports.capture(exc, 'ui_message')
     message_handler.report_message = handle_message
     message_handler.report_on_show = report_dialog.show_pending
@@ -293,7 +283,6 @@ async def main(page: ft.Page):
             raise RuntimeError("Test error: application startup error report form")
         except RuntimeError as exc:
             reports.capture(exc, 'startup_test')
-    report_queue.start()
     catalog_sync.start()
     tray.start()
     debug_console.start_f12_hotkey_listener(debug_console.request_toggle)

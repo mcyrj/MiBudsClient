@@ -204,7 +204,7 @@ class AppMessageHandlerTests(unittest.TestCase):
         with ExitStack() as stack:
             for name in ("WindowManager", "SystemTray", "DebugConsoleManager",
                          "BTController", "FullscreenGameMonitor", "start_instance_listener",
-                         "start_update_check", "CatalogSync", "ReportQueue", "ErrorReportManager",
+                         "start_update_check", "CatalogSync", "ErrorReportManager",
                          "ErrorReportDialog"):
                 stack.enter_context(patch.object(main, name))
             stack.enter_context(patch.object(main, "threading", SimpleNamespace(
